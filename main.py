@@ -1,3 +1,5 @@
+import math
+
 import numpy as np
 import pandas as pd
 import matplotlib
@@ -14,67 +16,82 @@ rcParams.update(config)
 
 plt.rcParams['axes.unicode_minus'] = False
 
-df_train = pd.read_csv("crime-train.csv")
-df_train_np = pd.DataFrame(df_train).to_numpy()
-df_test = pd.read_csv("crime-test.csv")
-df_test_np = pd.DataFrame(df_test).to_numpy()
+df = pd.read_csv("Thyroid_Diff.csv")
 
-# Define t, X, N in train set and test set
-t_train = df_train_np[:, :1].reshape(-1, 1)
-X_train = df_train_np[:, 1:]
+# 计算分割点
+split_point = int(len(df) * 0.8)
+
+# 分割数据集
+train_df = df[:split_point]
+test_df = df[split_point:]
+
+# 转换为numpy数组，假设最后一列是目标变量
+train_np = train_df.to_numpy()
+test_np = test_df.to_numpy()
+
+# 定义训练集
+t_train = train_np[:, -1].reshape(-1, 1)
+X_train = train_np[:, :-1]
 N_train = X_train.shape[0]
 X_train = np.hstack([np.ones([N_train, 1]), X_train])  # add bias
 
-t_test = df_test_np[:, :1].reshape(-1, 1)
-X_test = df_test_np[:, 1:]
+# 定义测试集
+t_test = test_np[:, -1].reshape(-1, 1)
+X_test = test_np[:, :-1]
 N_test = X_test.shape[0]
 X_test = np.hstack([np.ones([N_test, 1]), X_test])  # add bias
-
 # Extra Useful Definition
 M = X_train.shape[1]
 XTX = X_train.T @ X_train
 XTt = X_train.T @ t_train
-# ============= Gradient Descent ================
+
+
+def sigmoid(z):
+    return 1 / (1 + np.exp(-z))
+
+
+# ============= Gradient Descent with Cross-Entropy Loss ================
 maxIter = 10000
-eta = 1e-5 # learning rate
-epsilon = 1e-5 # threshold
+eta = 1e-5  # learning rate
+epsilon = 1e-5  # threshold for stopping criterion
 w = np.random.uniform(0, 1, (M, 1))
 E = np.zeros(maxIter + 1)
+
 # Initial prediction
-y = np.matmul(X_train, w)
-# Initial error function value
-E[0] = np.linalg.norm(y - t_train) ** 2 / 2
+y = sigmoid(np.matmul(X_train, w))
+# Initial cross-entropy error function value
+E[0] = -np.sum(t_train * np.log(y) + (1 - t_train) * np.log(1 - y))
 
 for k in range(1, maxIter + 1):
     w_prev = w
-    # update gradient
-    grad = np.matmul(XTX, w) - XTt
-    # update weights
+    # Update gradient: grad = X_train.T @ (y - t_train)
+    grad = np.matmul(X_train.T, (y - t_train))
+    # Update weights
     w = w - eta * grad
-    # update predictions
-    y = np.matmul(X_train, w)
-    # update error function's value
-    E[k] = np.linalg.norm(y - t_train) ** 2 / 2
-    # check stopping criterion
-    if max(np.abs(w - w_prev)) < epsilon:
+    # Update predictions
+    y = sigmoid(np.matmul(X_train, w))
+    # Update error function's value (Cross-Entropy)
+    E[k] = -np.sum(t_train * np.log(y) + (1 - t_train) * np.log(1 - y))
+    # Check stopping criterion
+    if np.linalg.norm(w - w_prev) < epsilon:
         break
-print("The Stopping critirition:", k)
-print("The first 10 elements of w are: \n", w[0:10])
-MSE_train = np.matmul(np.transpose(y - t_train), (y - t_train)) / N_train
-y_test = np.matmul(X_test, w)
-MSE_test = np.matmul(np.transpose(y_test - t_test), (y_test - t_test)) / N_test
-print("Training MSE: ", MSE_train)
+
+print("Stopping criterion reached at iteration:", k)
+print("The first 10 elements of w are:\n", w[:10])
+MSE_train = np.mean((y - t_train) ** 2)
+y_test = sigmoid(np.matmul(X_test, w))
+MSE_test = np.mean((y_test - t_test) ** 2)
+print("Training Cross-Entropy Loss: ", E[k])
 print("Test MSE: ", MSE_test)
-print("First 10 elements of predicted crime rate: \n", y_test[0:10])
-print("The objective function E converges at:", E[k])
+print("First 10 elements of predicted outcomes: \n", y_test[:10])
 
-# Least Squares (closed-form solution)
-w_star = np.matmul(np.linalg.inv(XTX), XTt)
-print("The first 10 elements of closed-form solution w_star are \n:", w_star[0:10])
+# Plot the error function
+import matplotlib.pyplot as plt
 
-fig, ax = plt.subplots()
-ax.plot(range(1, k + 1), E[0:k], 'r-', label="Error Function", linewidth=2)
+plt.figure()
+plt.plot(range(1, k + 1), E[0:k], 'r-', label="Cross-Entropy Loss", linewidth=2)
 plt.xlabel('Iteration Number')
-plt.ylabel('Error Function', color="blue")
+plt.ylabel('Cross-Entropy Loss')
+plt.title('Error Function Convergence')
 plt.grid(True)
 plt.show()
